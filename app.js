@@ -5,10 +5,10 @@ var async = require('async');
 var session = require('express-session'),
 	cookieParser = require('cookie-parser'),
     bodyParser = require('body-parser');
+var ObjectId = require('mongoose').Schema.ObjectId
 
 var app = express()
 var port = process.env.PORT || 3000
-
 
 
 // 用于将Session存入mongodb中
@@ -86,12 +86,16 @@ io.sockets.on('connection', function(socket) {
         mesg: err
       })
     } else {
-      socket.broadcast.emit('online', user)
-      socket.broadcast.emit('messageAdded', {
-        content: user.name + '进入了聊天室',
-        creator: SYSTEM,
-        createAt: new Date()
-      })
+      if (user._roomId) {
+          socket.join(user._roomId)
+          socket.to(user._roomId).broadcast.emit('users.join', user)
+          socket.to(user._roomId).broadcast.emit('messages.add', {
+            content: user.name + '进入了聊天室',
+            creator: SYSTEM,
+            createAt: new Date(),
+            _id: ObjectId()
+        })
+      }
     }
   })
   socket.on('disconnect', function() {
@@ -101,12 +105,16 @@ io.sockets.on('connection', function(socket) {
           mesg: err
         })
       } else {
-        socket.broadcast.emit('offline', user)
-        socket.broadcast.emit('messageAdded', {
-          content: user.name + '离开了聊天室',
-          creator: SYSTEM,
-          createAt: new Date()
-        })
+        if (user && user._roomId) {
+          socket.to(user._roomId).broadcast.emit('leaveRoom', user)
+          socket.to(user._roomId).broadcast.emit('messageAdded', {
+            content: user.name + '离开了聊天室',
+            creator: SYSTEM,
+            createAt: new Date(),
+            _id: ObjectId()
+          })
+          Controllers.User.leaveRoom({user: user}, function() {})
+        }
       }
     })
   });
@@ -132,17 +140,102 @@ io.sockets.on('connection', function(socket) {
       }
     });
   })
-
+    
+  // 
   socket.on('createMessage', function(message) {
     //这个回调函数参数message会被数据填充，对应的值为插入的值
-    Controllers.Messages.create(message, function (err, message) {
+    Controllers.Messages.create(message, function(err, message) {
       if (err) {
-        socket.emit('err', {msg: err})
+        socket.emit('err', {
+          msg: err
+        })
       } else {
-        io.sockets.emit('messageAdded', message)
+        //广播给出发送方以外的其他房间内的人
+        socket.in(message._roomId).broadcast.emit('messageAdded', message)
+
+        //事件触发给发送方的socket监听
+        socket.emit('messageAdded', message)
       }
     })
   })
+
+  socket.on('createRoom', function (room) {
+    //服务器里面有没有存message 的 content
+    Controllers.Room.create(room, function (err, room) {
+      if (err) {
+        socket.emit('err', {msg: err})
+      } else {
+        io.sockets.emit('roomAdded', room)
+      }
+    })
+  })
+
+  socket.on('getAllRooms', function(data) {
+    //如果带上了_roomId
+    if (data && data._roomId) {
+      Controllers.Room.getById(data._roomId, function(err, room) {
+        if (err) {
+          socket.emit('err', {
+            msg: err
+          })
+        } else {
+          socket.emit('roomData.' + data._roomId, room)
+        }
+      })
+    } else {
+      Controllers.Room.read(function(err, rooms) {
+        if (err) {
+          socket.emit('err', {
+            msg: err
+          })
+        } else {
+          socket.emit('roomsData', rooms)
+        }
+      })
+    }
+  })
+
+  socket.on('joinRoom', function(join) {
+    Controllers.User.joinRoom(join, function(err) {
+      if (err) {
+        socket.emit('err', {
+          msg: err
+        })
+      } else {
+        socket.join(join.room._id) //创建并加入一个socket房间, 注意这是socket房间，此房间非彼房间
+        socket.emit('joinRoom.' + join.user._id, join)
+        socket.to(join.room._id).broadcast.emit('messageAdded', {
+          content: join.user.name + '进入了聊天室',
+          creator: SYSTEM,
+          createAt: new Date(),
+          _id: ObjectId()
+        })
+
+        //仅仅向joined的房间brodcast了，而其它未加入房间的并没有
+        socket.to(join.room._id).broadcast.emit('joinRoom', join)
+      }
+    })
+  })
+
+  socket.on('leaveRoom', function(leave) {
+    Controllers.User.leaveRoom(leave, function(err) {
+      if (err) {
+        socket.emit('err', {
+          msg: err
+        })
+      } else {
+        socket.in(leave.room._id).broadcast.emit('messageAdded', {
+          content: leave.user.name + '离开了聊天室',
+          creator: SYSTEM,
+          createAt: new Date(),
+          _id: ObjectId()
+        })
+        socket.leave(leave.room._id)
+        io.sockets.emit('leaveRoom', leave)
+      }
+    })
+  })
+
 })
 
 
@@ -169,7 +262,7 @@ app.get('/api/validate', function (req, res) {
   } else {
     res.status(401).json(null)
     // res.json(401, null)
-  }
+  } 
 })
 
 
@@ -202,6 +295,7 @@ app.post('/api/login', function(req, res) {
 })
 
 app.get('/api/logout', function(req, res) {
+  req.session._userId = null;
   _userId = req.session._userId
   Controllers.User.offline(_userId, function (err, user) {
     if (err) {
@@ -209,8 +303,8 @@ app.get('/api/logout', function(req, res) {
         msg: err
       })
     } else {
-      res.json(200)
       delete req.session._userId
+      res.json(200)
     }
   })
 })

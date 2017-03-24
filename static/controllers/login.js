@@ -6,13 +6,10 @@ angular.module('techNodeApp').controller('LoginCtrl', function($scope, $http, $l
       data: {
         email: $scope.email
       }
-    }).then(function (response){
-      // 此处后台response的数据有问题
-      // success
-      $scope.$emit('login', response.data)
-      $location.path('/')
-    },function (err){
-      //error
+    }).then(function (user) {
+      $scope.$emit('login', user.data)
+      $location.path('/rooms')
+    },function (err) {
       $location.path('/login')
     });
   }

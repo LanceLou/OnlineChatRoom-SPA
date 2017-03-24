@@ -4,12 +4,13 @@ run(function ($window, $rootScope, $http, $location) {
   $http({
     url: '/api/validate',
     method: 'GET'
-  }).then(function (response){
-  	$rootScope.me = response.data
-    $location.path('/')
-  },function (err){
-  	$location.path('/login')
+  }).then(function (user) {
+    $rootScope.me = user
+    $location.path('/rooms')
+  }, function (err) {
+    $location.path('/login')
   });
+
   $rootScope.logout = function() {
     $http({
       url: '/api/logout',
@@ -18,7 +19,7 @@ run(function ($window, $rootScope, $http, $location) {
   	  $rootScope.me = null
       $location.path('/login')
     },function (err){
-  	  // 
+  	  
     });
   }
   $rootScope.$on('login', function (evt, me) {

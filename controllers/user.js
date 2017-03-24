@@ -48,3 +48,26 @@ exports.getOnlineUsers = function(callback) {
     online: true
   }, callback)
 }
+
+exports.joinRoom = function (join, callback) {
+  db.User.findOneAndUpdate({
+    _id: join.user._id
+  }, {
+    $set: {
+      online: true,
+      _roomId: join.room._id
+    }
+  }, callback)
+}
+
+//用户离开房间处理
+exports.leaveRoom = function (leave, callback) {
+  db.User.findOneAndUpdate({
+    _id: leave.user._id
+  }, {
+    $set: {
+      online: true,
+      _roomId: null
+    }
+  }, callback)
+}

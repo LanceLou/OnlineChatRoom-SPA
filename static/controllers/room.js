@@ -1,25 +1,30 @@
-angular.module('techNodeApp').controller('RoomCtrl', function($scope, socket) {
-
-  socket.on('roomData', function (room) {
-    console.log(room);
+angular.module('techNodeApp').controller('RoomCtrl', function($scope, $routeParams, socket) {
+  socket.emit('getAllRooms', {
+    // 获取root参数
+    _roomId: $routeParams._roomId
+  })
+  socket.on('roomData.' + $routeParams._roomId, function(room) {
     $scope.room = room
   })
-  
-  // 本地产生的时间本地捕获处理，快速响应, 先将消息绘制上去
-  socket.on('messageAdded', function (message) {
+  socket.on('messageAdded', function(message) {
     $scope.room.messages.push(message)
-    console.log($scope.room.messages);
   })
-  //用户上线，添加显示列表
-  socket.on('online', function (user) {
-    $scope.room.users.push(user)
+  socket.on('joinRoom', function (join) {
+    $scope.room.users.push(join.user)
   })
-  //游湖下线，删除显示列表对应项
-  socket.on('offline', function (user) {
-    _userId = user._id
-    $scope.room.users = $scope.room.users.filter(function (user) {
+
+  //用户离开页面处理, 路由被改变
+  $scope.$on('$routeChangeStart', function() {
+    socket.emit('leaveRoom', {
+      user: $scope.me,
+      room: $scope.room
+    })
+  })
+
+  socket.on('leaveRoom', function(leave) {
+    _userId = leave.user._id
+    $scope.room.users = $scope.room.users.filter(function(user) {
       return user._id != _userId
     })
   })
-  socket.emit('getRoom')
 })

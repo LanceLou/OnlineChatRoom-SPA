@@ -2,9 +2,9 @@ var db = require('../models')
 
 exports.create = function(message, callback) {
   var dbmessage = new db.Message()
-  dbmessage.content = message.message
+  dbmessage.content = message.content
   dbmessage.creator = message.creator
-  console.log(message);
+  dbmessage._roomId = message._roomId
   dbmessage.save(callback)
 }
 exports.read = function(callback) {

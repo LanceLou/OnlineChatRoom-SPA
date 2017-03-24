@@ -4,7 +4,11 @@ angular.module('techNodeApp').config(function($routeProvider, $locationProvider)
     requireBase: false
   })
   $routeProvider.
-  when('/', {
+  when('/rooms', {
+    templateUrl: '/pages/rooms.html',
+    controller: 'RoomsCtrl'
+  }).
+  when('/rooms/:_roomId', {
     templateUrl: '/pages/room.html',
     controller: 'RoomCtrl'
   }).
